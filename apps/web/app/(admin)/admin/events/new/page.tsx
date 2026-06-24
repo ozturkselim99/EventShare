@@ -1,0 +1,195 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ApiError } from "@/lib/api-client";
+import { createEventAction } from "@/lib/auth";
+
+const EXPIRATION_PRESETS = [
+  { label: "7 Gün", days: 7 },
+  { label: "30 Gün", days: 30 },
+  { label: "90 Gün", days: 90 },
+  { label: "Özel Tarih", days: null },
+];
+
+function addDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 16);
+}
+
+export default function NewEventPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    eventDate: "",
+    expiresAt: addDays(30),
+    expirationMode: "VIEW_ONLY",
+    maxUploads: "",
+  });
+
+  function set(key: string, value: string) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const event = await createEventAction({
+        name: form.name,
+        description: form.description || undefined,
+        eventDate: form.eventDate || undefined,
+        expiresAt: new Date(form.expiresAt).toISOString(),
+        expirationMode: form.expirationMode,
+        maxUploads: form.maxUploads ? parseInt(form.maxUploads, 10) : undefined,
+      });
+      router.push(`/admin/events/${event.id}`);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Etkinlik oluşturulamadı.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="max-w-2xl">
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">
+        Yeni Etkinlik Oluştur
+      </h1>
+
+      <form onSubmit={handleSubmit} className="space-y-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Etkinlik Adı *
+          </label>
+          <input
+            type="text"
+            required
+            value={form.name}
+            onChange={(e) => set("name", e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+            placeholder="Ayşe & Ali Düğünü"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Açıklama
+          </label>
+          <textarea
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+            rows={3}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"
+            placeholder="Etkinlik hakkında kısa bir açıklama..."
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Etkinlik Tarihi
+          </label>
+          <input
+            type="datetime-local"
+            value={form.eventDate}
+            onChange={(e) => set("eventDate", e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Yayın Süresi *
+          </label>
+          <div className="flex gap-2 flex-wrap mb-3">
+            {EXPIRATION_PRESETS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => {
+                  if (p.days !== null) set("expiresAt", addDays(p.days));
+                }}
+                className="px-4 py-2 text-sm border border-gray-200 rounded-xl hover:bg-gray-50 transition"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <input
+            type="datetime-local"
+            required
+            value={form.expiresAt}
+            onChange={(e) => set("expiresAt", e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Sona Erme Modu
+          </label>
+          <select
+            value={form.expirationMode}
+            onChange={(e) => set("expirationMode", e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+          >
+            <option value="VIEW_ONLY">
+              Galeri görünür kalır, yüklemeler kapanır
+            </option>
+            <option value="CLOSED">
+              Etkinlik tamamen kapanır
+            </option>
+            <option value="ARCHIVE">
+              Arşiv moduna geçer
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Maksimum Yükleme Sayısı (opsiyonel)
+          </label>
+          <input
+            type="number"
+            min={1}
+            value={form.maxUploads}
+            onChange={(e) => set("maxUploads", e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+            placeholder="Sınırsız"
+          />
+        </div>
+
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-6 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-700 transition disabled:opacity-50"
+          >
+            {loading ? "Oluşturuluyor..." : "Etkinlik Oluştur"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="px-6 py-2.5 border border-gray-200 text-sm rounded-xl hover:bg-gray-50 transition"
+          >
+            İptal
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

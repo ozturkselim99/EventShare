@@ -1,0 +1,35 @@
+{
+  "name": "eventshare",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset"
+  },
+  "devDependencies": {
+    "@prisma/client": "^6.19.3",
+    "@types/pg": "^8.20.0",
+    "prisma": "^6.19.3",
+    "tsx": "^4.19.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^6.19.3",
+    "@types/archiver": "^8.0.0",
+    "archiver": "^8.0.0",
+    "pg": "^8.21.0"
+  },
+  "overrides": {
+    "prisma": "6.19.3",
+    "@prisma/client": "6.19.3"
+  }
+}

@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: "Inter", system-ui, sans-serif;
+  }
+
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+  }
+}
+
+@layer utilities {
+  .masonry-grid {
+    columns: 2;
+    column-gap: 0.75rem;
+  }
+
+  @media (min-width: 640px) {
+    .masonry-grid {
+      columns: 3;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .masonry-grid {
+      columns: 4;
+    }
+  }
+
+  .masonry-item {
+    break-inside: avoid;
+    margin-bottom: 0.75rem;
+  }
+}
