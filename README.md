@@ -37,8 +37,9 @@ Bilgisayarınızda şunlar yüklü olmalı:
 
 - **Node.js** >= 22.x
 - **pnpm** >= 9.x
-- **Docker Desktop** (Postgres için)
+- **Docker Desktop** (opsiyonel, sadece tam stack deploy için)
 - **Git**
+- **Neon DB hesabı** ([console.neon.tech](https://console.neon.tech))
 
 ### pnpm Kurulumu
 
@@ -83,14 +84,15 @@ R2 kullanmak için ek değişkenler: [`docs/r2-setup.md`](docs/r2-setup.md)
 pnpm install
 ```
 
-### 4. Postgres'i Başlatın
+### 4. Neon DB Bağlantısını Ayarlayın
 
-```bash
-docker compose up -d postgres
+[console.neon.tech](https://console.neon.tech) adresinden proje oluşturun ve connection string'i `.env` dosyasındaki `DATABASE_URL` değerine yapıştırın:
 
-# Kontrol et
-docker ps
+```env
+DATABASE_URL=postgresql://<user>:<password>@<host>.neon.tech/<dbname>?sslmode=require
 ```
+
+> Docker'da yerel Postgres çalıştırmanıza gerek yok.
 
 ### 4b. QStash Local Dev Server'ı Başlatın
 
@@ -277,15 +279,11 @@ netstat -ano | findstr :3001
 taskkill /F /PID <pid>
 ```
 
-### Docker bağlanamıyor
+### Neon DB bağlanamıyor
 
-```bash
-# Docker Desktop çalışıyor mu?
-docker ps
-
-# Postgres'i yeniden başlat
-docker compose restart postgres
-```
+- `DATABASE_URL`'in doğru olduğunu kontrol edin (`sslmode=require` dahil)
+- Neon Console'da projenin aktif olduğunu doğrulayın
+- `pnpm db:migrate:deploy` ile migration durumunu kontrol edin
 
 ### Prisma / Migration hatası
 

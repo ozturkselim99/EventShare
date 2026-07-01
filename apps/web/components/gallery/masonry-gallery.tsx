@@ -61,12 +61,20 @@ export function MasonryGallery({ eventToken, eventId, initialData }: Props) {
             onClick={() => setLightboxIndex(idx)}
           >
             {item.type === "IMAGE" ? (
-              <img
-                src={item.thumbnailUrl ?? item.originalUrl ?? ""}
-                alt={item.uploadedBy ? `Yükleyen: ${item.uploadedBy}` : ""}
-                loading="lazy"
-                className="w-full rounded-xl object-cover group-hover:opacity-90 transition"
-              />
+              <div className="relative w-full rounded-xl overflow-hidden bg-gray-100 min-h-[120px]">
+                <img
+                  src={item.thumbnailUrl ?? item.originalUrl ?? ""}
+                  alt={item.uploadedBy ? `Yükleyen: ${item.uploadedBy}` : ""}
+                  loading={idx < 6 ? "eager" : "lazy"}
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (target.src !== item.originalUrl && item.originalUrl) {
+                      target.src = item.originalUrl;
+                    }
+                  }}
+                  className="w-full block rounded-xl object-cover group-hover:opacity-90 transition"
+                />
+              </div>
             ) : (
               <div className="relative w-full rounded-xl overflow-hidden bg-black">
                 {item.thumbnailUrl ? (

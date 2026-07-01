@@ -1,35 +1,13 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: eventshare
-      POSTGRES_USER: eventshare
-      POSTGRES_PASSWORD: eventshare_secret
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eventshare"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.api
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://eventshare:eventshare_secret@postgres:5432/eventshare
       WORKER_PUBLIC_URL: http://worker:3002
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
       - "3001:3001"
-    volumes:
-      - ./apps/api/src:/app/apps/api/src
 
   worker:
     build:
@@ -37,11 +15,7 @@ services:
       dockerfile: infra/docker/Dockerfile.worker
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://eventshare:eventshare_secret@postgres:5432/eventshare
       WORKER_PORT: 3002
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
       - "3002:3002"
 
@@ -56,6 +30,3 @@ services:
       - api
     ports:
       - "3000:3000"
-
-volumes:
-  postgres-data:
