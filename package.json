@@ -13,7 +13,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
-    "verify:r2": "tsx --env-file=.env scripts/verify-r2-env.ts"
+    "verify:r2": "tsx --env-file=.env scripts/verify-r2-env.ts",
+    "qstash:dev": "npx @upstash/qstash-cli dev"
   },
   "devDependencies": {
     "@prisma/client": "^6.19.3",

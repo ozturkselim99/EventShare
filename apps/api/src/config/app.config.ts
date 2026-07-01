@@ -13,4 +13,9 @@ export default registerAs("app", () => ({
     process.env.PRESIGNED_URL_TTL_SECONDS ?? "600",
     10,
   ),
+  qstash: {
+    token: process.env.QSTASH_TOKEN ?? "",
+    url: process.env.QSTASH_URL ?? "",
+    workerUrl: process.env.WORKER_PUBLIC_URL ?? "http://localhost:3002",
+  },
 }));

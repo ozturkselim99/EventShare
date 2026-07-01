@@ -1,18 +1,17 @@
 import { Module } from "@nestjs/common";
-import { BullModule } from "@nestjs/bullmq";
 import { JwtModule } from "@nestjs/jwt";
 import { UploadsService } from "./uploads.service";
 import { UploadsController } from "./uploads.controller";
 import { EventsModule } from "../events/events.module";
 import { StorageModule } from "../storage/storage.module";
-import { QueueName } from "@eventshare/shared";
+import { QstashModule } from "../queue/qstash.module";
 
 @Module({
   imports: [
     EventsModule,
     StorageModule,
     JwtModule.register({}),
-    BullModule.registerQueue({ name: QueueName.MEDIA_PROCESSING }),
+    QstashModule,
   ],
   providers: [UploadsService],
   controllers: [UploadsController],

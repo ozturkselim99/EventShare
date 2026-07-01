@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { type EventRecord, type GalleryPage } from "@/lib/api-client";
+import { useState } from "react";
+import { type EventRecord, type GalleryPage, publicApi } from "@/lib/api-client";
 import { MasonryGallery } from "@/components/gallery/masonry-gallery";
 import { UploadZone } from "@/components/upload/upload-zone";
 
@@ -12,10 +12,27 @@ interface Props {
 }
 
 export function EventPageClient({ event, initialGallery, isExpired }: Props) {
-  const router = useRouter();
+  const [processing, setProcessing] = useState(false);
 
-  const handleUploadComplete = () => {
-    // Sayfayı tamamen yenile (cache'i temizle)
+  const handleUploadComplete = async () => {
+    setProcessing(true);
+
+    // Timestamp of the newest known item (or epoch if gallery was empty)
+    const latestKnownAt = initialGallery.data[0]?.createdAt ?? "1970-01-01T00:00:00.000Z";
+
+    // Poll until a READY item newer than what we had appears (max ~20s)
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      try {
+        const gallery = await publicApi.getMedia(event.token, event.id, { limit: 5 });
+        const hasNew = gallery.data.some((m) => m.createdAt > latestKnownAt);
+        if (hasNew) break;
+      } catch {
+        // ignore transient errors during polling
+      }
+    }
+
+    setProcessing(false);
     window.location.reload();
   };
 
@@ -51,6 +68,15 @@ export function EventPageClient({ event, initialGallery, isExpired }: Props) {
         {event.allowUploads && !isExpired && (
           <div className="mb-8">
             <UploadZone eventToken={event.token} onUploaded={handleUploadComplete} />
+            {processing && (
+              <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
+                <svg className="animate-spin h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Medya işleniyor, galeri güncelleniyor...
+              </div>
+            )}
           </div>
         )}
 
