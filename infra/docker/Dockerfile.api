@@ -15,6 +15,7 @@ COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY prisma ./prisma
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
+RUN pnpm --filter @eventshare/shared build
 RUN pnpm --filter @eventshare/api exec prisma generate
 RUN pnpm --filter @eventshare/api run build
 
