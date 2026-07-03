@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
-import { BullModule } from "@nestjs/bullmq";
 import { AuthModule } from "./modules/auth/auth.module";
 import { EventsModule } from "./modules/events/events.module";
 import { MediaModule } from "./modules/media/media.module";
@@ -28,15 +27,6 @@ import storageConfig from "./config/storage.config";
         limit: 120,
       },
     ]),
-
-    BullModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        connection: {
-          url: config.get<string>("REDIS_URL") ?? "redis://localhost:6379",
-        },
-      }),
-    }),
 
     PrismaModule,
     StorageModule,

@@ -1,31 +1,37 @@
-import { Processor, WorkerHost, OnWorkerEvent } from "@nestjs/bullmq";
-import { Logger } from "@nestjs/common";
-import type { Job } from "bullmq";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
-import { ImageService } from "../services/image.service";
-import { VideoService } from "../services/video.service";
+import { ImageService } from "./image.service";
+import { VideoService } from "./video.service";
 import {
   JobName,
   MediaStatus,
-  QueueName,
   type ProcessMediaJobData,
 } from "@eventshare/shared";
 
-@Processor(QueueName.MEDIA_PROCESSING, { concurrency: 4 })
-export class MediaProcessor extends WorkerHost {
-  private readonly logger = new Logger(MediaProcessor.name);
+@Injectable()
+export class MediaProcessingService {
+  private readonly logger = new Logger(MediaProcessingService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly imageService: ImageService,
     private readonly videoService: VideoService,
-  ) {
-    super();
-  }
+  ) {}
 
-  async process(job: Job<ProcessMediaJobData>) {
-    const { mediaId, eventId, storageKey, type } = job.data;
-    this.logger.log(`Processing job ${job.name} for media ${mediaId}`);
+  async process(jobName: JobName, data: ProcessMediaJobData) {
+    const { mediaId, eventId, storageKey } = data;
+    this.logger.log(`Processing job ${jobName} for media ${mediaId}`);
+
+    const media = await this.prisma.media.findUnique({ where: { id: mediaId } });
+    if (!media) {
+      this.logger.warn(`Media ${mediaId} not found, skipping`);
+      return;
+    }
+    // Idempotency: skip if already processed (QStash may retry/redeliver)
+    if (media.status === MediaStatus.READY) {
+      this.logger.log(`Media ${mediaId} already READY, skipping`);
+      return;
+    }
 
     await this.prisma.media.update({
       where: { id: mediaId },
@@ -58,15 +64,19 @@ export class MediaProcessor extends WorkerHost {
         width?: number | null;
         height?: number | null;
         durationSeconds?: number | null;
-        variants?: Array<{ key: string; kind: "THUMBNAIL" | "OPTIMIZED" | "VIDEO_PREVIEW"; size: bigint }>;
+        variants?: Array<{
+          key: string;
+          kind: "THUMBNAIL" | "OPTIMIZED" | "VIDEO_PREVIEW";
+          size: bigint;
+        }>;
       };
 
-      if (job.name === JobName.PROCESS_IMAGE) {
+      if (jobName === JobName.PROCESS_IMAGE) {
         result = await this.imageService.process(storageKey, eventId, mediaId);
-      } else if (job.name === JobName.PROCESS_VIDEO) {
+      } else if (jobName === JobName.PROCESS_VIDEO) {
         result = await this.videoService.process(storageKey, eventId, mediaId);
       } else {
-        throw new Error(`Unknown job name: ${job.name}`);
+        throw new Error(`Unknown job name: ${jobName}`);
       }
 
       await this.prisma.$transaction(async (tx: any) => {
@@ -106,10 +116,5 @@ export class MediaProcessor extends WorkerHost {
       });
       throw error;
     }
-  }
-
-  @OnWorkerEvent("failed")
-  onFailed(job: Job, error: Error) {
-    this.logger.error(`Job ${job.id} failed after ${job.attemptsMade} attempts: ${error.message}`);
   }
 }

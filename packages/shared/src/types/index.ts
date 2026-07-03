@@ -6,6 +6,10 @@ export interface ProcessMediaJobData {
   type: "IMAGE" | "VIDEO";
 }
 
+export interface MediaJobMessage extends ProcessMediaJobData {
+  jobName: "process-image" | "process-video";
+}
+
 export interface ScanMediaJobData {
   mediaId: string;
   storageKey: string;

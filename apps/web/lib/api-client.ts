@@ -14,7 +14,7 @@ async function apiFetch<T>(
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });
+  const res = await fetch(`${BASE_URL}${path}`, { cache: "no-store", ...init, headers });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: res.statusText }));

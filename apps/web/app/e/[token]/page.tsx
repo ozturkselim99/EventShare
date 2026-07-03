@@ -26,6 +26,8 @@ export default async function GuestEventPage({ params }: Props) {
     redirect(`/e/${token}/expired`);
   }
 
+  const isNotStarted = !!event.eventDate && new Date(event.eventDate) > now;
+
   let initialGallery: GalleryPage = { data: [], nextCursor: null, hasMore: false };
   try {
     initialGallery = await publicApi.getMedia(token, event.id, { limit: 40 });
@@ -38,6 +40,7 @@ export default async function GuestEventPage({ params }: Props) {
       event={event}
       initialGallery={initialGallery}
       isExpired={isExpired}
+      isNotStarted={isNotStarted}
     />
   );
 }

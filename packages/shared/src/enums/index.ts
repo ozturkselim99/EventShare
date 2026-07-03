@@ -33,12 +33,6 @@ export enum MediaVariantKind {
   VIDEO_PREVIEW = "VIDEO_PREVIEW",
 }
 
-export enum QueueName {
-  MEDIA_PROCESSING = "media-processing",
-  VIRUS_SCAN = "virus-scan",
-  MAINTENANCE = "maintenance",
-}
-
 export enum JobName {
   PROCESS_IMAGE = "process-image",
   PROCESS_VIDEO = "process-video",

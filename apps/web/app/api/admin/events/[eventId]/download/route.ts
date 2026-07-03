@@ -1,42 +1,34 @@
-﻿import { NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-export async function GET(request, context) {
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ eventId: string }> },
+) {
   try {
-    console.log("=== DOWNLOAD ROUTE START ===");
-    
-    const params = await context.params;
-    const eventId = params.eventId;
-    console.log("EventId:", eventId);
-    
+    const { eventId } = await context.params;
+
     const cookieStore = await cookies();
     const token = cookieStore.get("es_access_token")?.value;
-    console.log("Has token:", !!token);
 
     if (!token) {
-      console.log("No token - returning 401");
       return NextResponse.json({ message: "No token" }, { status: 401 });
     }
 
-    const apiUrl = `http://localhost:3001/api/v1/admin/events/${eventId}/download`;
-    console.log("Fetching from:", apiUrl);
+    const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001/api/v1"}/admin/events/${eventId}/download`;
 
     const response = await fetch(apiUrl, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    console.log("Backend status:", response.status);
-
     if (!response.ok) {
-      console.log("Backend error - status:", response.status);
       return NextResponse.json(
         { message: `Backend error: ${response.status}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
     const buffer = await response.arrayBuffer();
-    console.log("Downloaded bytes:", buffer.byteLength);
 
     return new NextResponse(buffer, {
       headers: {
@@ -45,12 +37,7 @@ export async function GET(request, context) {
       },
     });
   } catch (err) {
-    console.error("=== ROUTE ERROR ===");
-    console.error("Error:", err);
-    console.error("Stack:", err.stack);
-    return NextResponse.json(
-      { message: "Error: " + err.message },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ message }, { status: 500 });
   }
 }

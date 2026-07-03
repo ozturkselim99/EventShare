@@ -13,14 +13,13 @@ flowchart TD
 
   web -->|"REST API"| api["NestJS API"]
   api -->|"Prisma queries"| db["PostgreSQL"]
-  api -->|"Rate limits / queues"| redis["Redis"]
   api -->|"Create presigned URL"| storageAdapter["Storage Adapter"]
   storageAdapter --> r2["Cloudflare R2"]
 
   guest -->|"Direct upload with presigned URL"| r2
   web -->|"Confirm upload metadata"| api
-  api -->|"Add processing job"| queue["BullMQ Queue"]
-  queue --> worker["NestJS Worker"]
+  api -->|"publishJSON"| queue["Upstash QStash"]
+  queue -->|"HTTP POST /jobs/media (signed)"| worker["NestJS Worker (HTTP :3002)"]
   worker -->|"Read original object"| r2
   worker -->|"Write WebP thumbnail / video preview"| r2
   worker -->|"Update media status"| db
@@ -548,9 +547,9 @@ model MediaVariant {
 | `UploadsModule` | Presign requests, completion callbacks, upload audit |
 | `StorageModule` | Provider abstraction for R2/S3/B2 |
 | `QrModule` | QR PNG, SVG, PDF generation |
-| `QueueModule` | BullMQ producers and shared queue config |
+| `QstashModule` | QStash publish client for media jobs |
 | `RateLimitModule` | IP, event, and endpoint-specific limits |
-| `HealthModule` | Readiness/liveness checks for DB, Redis, storage |
+| `HealthModule` | Readiness/liveness checks for DB and storage |
 
 ### Clean Architecture Boundaries
 
@@ -558,7 +557,7 @@ model MediaVariant {
 - Use cases enforce business rules: expiration, quotas, MIME allowlist, upload permissions.
 - Repositories hide Prisma.
 - Storage providers implement a common `StorageProvider` interface.
-- Queue producers do not process media; workers own processing.
+- The API only publishes jobs to QStash; workers own processing.
 
 Example storage contract:
 
@@ -759,17 +758,16 @@ Service behavior:
 
 ## 11. Background Worker Implementation
 
-Use BullMQ with Redis. The API enqueues work, and `apps/worker` processes it.
+Use **Upstash QStash** (HTTP-based queue). The API publishes a job with `publishJSON`, and QStash delivers a signed HTTP `POST /jobs/media` to `apps/worker`. The worker verifies the `Upstash-Signature` header, processes the media, and returns `2xx`. On non-2xx, QStash retries automatically (`retries: 3`).
 
-### Queues
+### Jobs
 
-| Queue | Job | Purpose |
+| Endpoint | Job (`jobName`) | Purpose |
 | --- | --- | --- |
-| `media-processing` | `process-image` | Strip EXIF, compress, generate WebP and thumbnail |
-| `media-processing` | `process-video` | Validate container, generate preview image |
-| `virus-scan` | `scan-media` | Optional ClamAV or vendor hook |
-| `maintenance` | `expire-events` | Apply expiration modes |
-| `maintenance` | `cleanup-orphans` | Delete abandoned `PENDING_UPLOAD` objects |
+| `POST /jobs/media` | `process-image` | Strip EXIF, compress, generate WebP and thumbnail |
+| `POST /jobs/media` | `process-video` | Validate container, generate preview image |
+
+Idempotency: QStash may redeliver, so the worker skips media already in `READY` status.
 
 ### Image Pipeline
 
@@ -793,14 +791,14 @@ Recommended library: `sharp`.
 
 ### Failure Handling
 
-- Retry transient storage failures with exponential backoff.
+- QStash retries failed deliveries (non-2xx) automatically with backoff.
 - Mark permanent decode/validation failures as `FAILED`.
 - Keep original object private until processing and validation are complete when strict moderation is required.
 - Expose failed uploads in admin panel for deletion or retry.
 
 ## 12. Docker Setup
 
-Local development should run PostgreSQL, Redis, API, worker, and web through Docker Compose.
+Local development should run PostgreSQL, API, worker, and web through Docker Compose. The QStash dev server (`pnpm qstash:dev`) runs separately on the host.
 
 ```yaml
 services:
@@ -815,11 +813,6 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
   api:
     build:
       context: .
@@ -827,7 +820,6 @@ services:
     env_file: .env
     depends_on:
       - postgres
-      - redis
     ports:
       - "3001:3001"
 
@@ -838,7 +830,8 @@ services:
     env_file: .env
     depends_on:
       - postgres
-      - redis
+    ports:
+      - "3002:3002"
 
   web:
     build:
@@ -858,7 +851,8 @@ Container notes:
 
 - API and worker use the same Prisma client and environment.
 - Web uses `NEXT_PUBLIC_API_BASE_URL`.
-- In production, database and Redis can be managed services or Coolify services.
+- In production, the database can be a managed service or Coolify service; QStash is a hosted Upstash service.
+- The worker must be publicly reachable over HTTPS so QStash can POST jobs to it.
 - Worker should be scaled independently from API.
 
 ## 13. Deployment Guide
@@ -869,7 +863,10 @@ Required production variables:
 
 ```env
 DATABASE_URL=
-REDIS_URL=
+QSTASH_TOKEN=
+QSTASH_CURRENT_SIGNING_KEY=
+QSTASH_NEXT_SIGNING_KEY=
+WORKER_PUBLIC_URL=https://worker.eventshare.app
 JWT_ACCESS_SECRET=
 JWT_REFRESH_SECRET=
 APP_PUBLIC_URL=https://eventshare.app
@@ -888,7 +885,7 @@ DEFAULT_EVENT_STORAGE_QUOTA_GB=20
 
 ### Coolify Deployment
 
-1. Create PostgreSQL and Redis services.
+1. Create a PostgreSQL service and an Upstash QStash project (token + signing keys).
 2. Create Cloudflare R2 bucket and public custom domain.
 3. Add secrets to Coolify project environment.
 4. Deploy `api`, `worker`, and `web` as separate services.
@@ -926,7 +923,7 @@ Pipeline stages:
 
 ### Phase 1: Secure Core
 
-- Monorepo setup with Next.js, NestJS, Prisma, PostgreSQL, Redis.
+- Monorepo setup with Next.js, NestJS, Prisma, PostgreSQL, QStash.
 - Admin login with JWT.
 - Event CRUD with secure tokens and expiration modes.
 - Public event page by token.
@@ -936,7 +933,7 @@ Pipeline stages:
 
 ### Phase 2: Media Processing
 
-- BullMQ worker.
+- QStash HTTP worker.
 - Image thumbnails, WebP conversion, EXIF stripping.
 - Video preview image generation.
 - Upload status states and retry handling.
@@ -998,11 +995,10 @@ Pipeline stages:
 
 ### Queue and Processing
 
-- Scale workers independently based on queue depth.
-- Separate image and video queues if video jobs block image throughput.
-- Use concurrency limits per worker type.
+- Scale worker HTTP instances independently behind a load balancer.
+- QStash handles delivery, retries, and backoff; tune `retries` and `Upstash-Timeout` for long video jobs.
 - Prioritize thumbnail generation before expensive optimization.
-- Add dead-letter queues for repeated failures.
+- Use QStash DLQ for repeated failures.
 
 ### Quotas and Abuse Control
 
@@ -1014,9 +1010,9 @@ Pipeline stages:
 
 ### Observability
 
-- Track API latency, presign failures, upload completion rate, queue depth, job duration, and processing failures.
+- Track API latency, presign failures, upload completion rate, QStash delivery/retry counts, job duration, and processing failures.
 - Log storage keys, media IDs, event IDs, and request IDs.
-- Add alerts for queue backlog, Redis failure, DB connection saturation, and R2 error rate.
+- Add alerts for QStash delivery failures, DB connection saturation, and R2 error rate.
 - Use structured logs and OpenTelemetry-compatible tracing.
 
 ### Event Expiration at Scale
@@ -1059,4 +1055,4 @@ Pipeline stages:
 
 ## Summary
 
-EventShare should be built as a monorepo with a Next.js web app, NestJS API, NestJS/BullMQ worker, PostgreSQL database, Redis queue/cache, and Cloudflare R2 storage. The architecture avoids backend file proxying, keeps guest access simple, gives admins operational control, and scales media-heavy event galleries through direct uploads, async processing, cursor pagination, CDN delivery, and independent worker scaling.
+EventShare should be built as a monorepo with a Next.js web app, NestJS API, NestJS HTTP worker driven by Upstash QStash, PostgreSQL database, and Cloudflare R2 storage. The architecture avoids backend file proxying, keeps guest access simple, gives admins operational control, and scales media-heavy event galleries through direct uploads, async processing, cursor pagination, CDN delivery, and independent worker scaling.

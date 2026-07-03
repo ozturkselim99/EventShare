@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { QrDownloadButtons } from "@/components/admin/qr-download-buttons";
 import { EventActions } from "@/components/admin/event-actions";
+import { EventInfoEditor } from "@/components/admin/event-info-editor";
 
 export default async function EventDetailPage({
   params,
@@ -48,6 +49,11 @@ export default async function EventDetailPage({
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Etkinlik Bilgileri</h2>
 
+          {/* Editable name & description */}
+          <div className="mb-4 pb-4 border-b border-gray-100">
+            <EventInfoEditor event={event} />
+          </div>
+
           <dl className="space-y-3 text-sm">
             <div>
               <dt className="text-gray-500">Durum</dt>
@@ -61,6 +67,16 @@ export default async function EventDetailPage({
                 })}
               </dd>
             </div>
+            {event.eventDate && (
+              <div>
+                <dt className="text-gray-500">Etkinlik Tarihi</dt>
+                <dd className="font-medium">
+                  {new Date(event.eventDate).toLocaleDateString("tr-TR", {
+                    dateStyle: "long",
+                  })}
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-gray-500">Yükleme</dt>
               <dd className="font-medium">

@@ -5,17 +5,16 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { InjectQueue } from "@nestjs/bullmq";
-import { Queue } from "bullmq";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { createHash, randomBytes } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { EventsService } from "../events/events.service";
 import { STORAGE_PROVIDER, StorageProvider } from "../storage/storage.interface";
+import { QstashService } from "../queue/qstash.service";
 import type { PresignDto } from "./dto/presign.dto";
 import type { CompleteUploadDto } from "./dto/complete-upload.dto";
-import { MediaStatus, QueueName, JobName } from "@eventshare/shared";
+import { MediaStatus, JobName } from "@eventshare/shared";
 
 @Injectable()
 export class UploadsService {
@@ -25,7 +24,7 @@ export class UploadsService {
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
-    @InjectQueue(QueueName.MEDIA_PROCESSING) private readonly mediaQueue: Queue,
+    private readonly qstash: QstashService,
   ) {}
 
   async presign(
@@ -142,7 +141,7 @@ export class UploadsService {
       },
     });
 
-    await this.mediaQueue.add(
+    await this.qstash.publishMediaJob(
       media.type === "VIDEO" ? JobName.PROCESS_VIDEO : JobName.PROCESS_IMAGE,
       {
         mediaId: media.id,
@@ -151,7 +150,6 @@ export class UploadsService {
         mimeType: media.mimeType,
         type: media.type,
       },
-      { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
     );
 
     return { mediaId: media.id, status: MediaStatus.UPLOADED };
