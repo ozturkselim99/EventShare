@@ -1,10 +1,5 @@
-import { redirect } from "next/navigation";
-import { getAccessToken } from "@/lib/auth";
+import { LandingPage } from "@/components/landing/landing-page";
 
-export default async function HomePage() {
-  const token = await getAccessToken();
-  if (token) {
-    redirect("/admin");
-  }
-  redirect("/login");
+export default function HomePage() {
+  return <LandingPage />;
 }
