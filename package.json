@@ -28,10 +28,11 @@
     "@prisma/adapter-pg": "^6.19.3",
     "@types/archiver": "^8.0.0",
     "archiver": "^8.0.0",
+    "framer-motion": "^11.0.0",
     "pg": "^8.21.0"
   },
-  "overrides": {
-    "prisma": "6.19.3",
-    "@prisma/client": "6.19.3"
+    "overrides": {
+      "prisma": "6.19.3",
+      "@prisma/client": "6.19.3"
   }
 }
