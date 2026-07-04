@@ -43,23 +43,6 @@ export function EventHero({ event, mediaStats }: EventHeroProps) {
     >
       {/* Hero Section - Luxury Invitation Style */}
       <div className="relative w-full min-h-auto sm:h-[60vh] lg:h-[70vh] flex flex-col items-center justify-center overflow-hidden" style={{ backgroundColor: '#F8F5F0' }}>
-        {/* Cover Image Background */}
-        {event.coverImage && (
-          <motion.div
-            initial={{ scale: 1.1 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 1.2, ease: "easeOut" }}
-            className="absolute inset-0"
-          >
-            <img
-              src={event.coverImage}
-              alt={event.name}
-              className="w-full h-full object-cover"
-            />
-            {/* Luxury Invitation Overlay - Elegant and light */}
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(18,18,18,0.15), rgba(18,18,18,0.35), rgba(18,18,18,0.5))' }} />
-          </motion.div>
-        )}
 
 
         {/* Main Content */}
