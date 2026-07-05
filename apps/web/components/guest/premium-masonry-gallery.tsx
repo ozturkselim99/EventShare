@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { publicApi, type MediaRecord, type GalleryPage } from "@/lib/api-client";
 import { Lightbox } from "@/components/gallery/lightbox";
+import { VideoThumbnail } from "@/components/gallery/video-thumbnail";
 import { Play } from "lucide-react";
 
 interface Props {
@@ -136,18 +137,17 @@ export function PremiumMasonryGallery({
                     transition={{ duration: 0.6 }}
                     className="relative w-full h-full bg-gray-900"
                   >
-                    {item.thumbnailUrl ? (
-                      <img
-                        src={item.thumbnailUrl}
-                        alt="Video preview"
-                        loading="lazy"
-                        className="w-full h-full object-cover group-hover:brightness-75 transition-all duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-                        <Play className="w-12 h-12 text-white/60" />
-                      </div>
-                    )}
+                    <VideoThumbnail
+                      thumbnailUrl={item.thumbnailUrl}
+                      originalUrl={item.originalUrl}
+                      alt="Video preview"
+                      className="w-full h-full object-cover group-hover:brightness-75 transition-all duration-300"
+                      fallback={
+                        <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                          <Play className="w-12 h-12 text-white/60" />
+                        </div>
+                      }
+                    />
                   </motion.div>
 
                   {/* Play Button Overlay */}

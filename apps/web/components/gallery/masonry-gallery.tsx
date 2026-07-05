@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { publicApi, type MediaRecord, type GalleryPage } from "@/lib/api-client";
 import { Lightbox } from "./lightbox";
+import { VideoThumbnail } from "./video-thumbnail";
 
 interface Props {
   eventToken: string;
@@ -77,18 +78,17 @@ export function MasonryGallery({ eventToken, eventId, initialData }: Props) {
               </div>
             ) : (
               <div className="relative w-full rounded-xl overflow-hidden bg-black">
-                {item.thumbnailUrl ? (
-                  <img
-                    src={item.thumbnailUrl}
-                    alt="Video önizleme"
-                    loading="lazy"
-                    className="w-full object-cover group-hover:opacity-80 transition"
-                  />
-                ) : (
-                  <div className="h-40 bg-gray-900 flex items-center justify-center">
-                    <span className="text-white text-4xl">▶</span>
-                  </div>
-                )}
+                <VideoThumbnail
+                  thumbnailUrl={item.thumbnailUrl}
+                  originalUrl={item.originalUrl}
+                  alt="Video önizleme"
+                  className="w-full object-cover group-hover:opacity-80 transition"
+                  fallback={
+                    <div className="h-40 bg-gray-900 flex items-center justify-center">
+                      <span className="text-white text-4xl">▶</span>
+                    </div>
+                  }
+                />
                 <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <span className="w-12 h-12 bg-black/50 rounded-full flex items-center justify-center text-white text-xl">
                     ▶

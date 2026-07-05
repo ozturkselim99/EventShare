@@ -91,8 +91,10 @@ export function Lightbox({ items, initialIndex, onClose }: Props) {
         ) : (
           <video
             src={item.originalUrl ?? ""}
+            poster={item.thumbnailUrl ?? undefined}
             controls
             autoPlay
+            playsInline
             className="max-h-[80vh] max-w-full rounded-xl"
           />
         )}

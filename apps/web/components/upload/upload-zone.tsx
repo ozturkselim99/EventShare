@@ -165,8 +165,7 @@ export function UploadZone({ eventToken, onUploaded }: Props) {
           ref={inputRef}
           type="file"
           multiple
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime"
-          capture="environment"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*,video/mp4,video/quicktime,video/*"
           className="hidden"
           onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
         />

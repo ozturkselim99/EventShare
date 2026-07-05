@@ -78,20 +78,37 @@ export class VideoService {
       let previewKey: string | null = null;
       let previewUrl: string | null = null;
 
-      try {
-        await exec("ffmpeg", [
-          "-i", videoPath,
-          "-ss", "00:00:01",
-          "-vframes", "1",
-          "-q:v", "3",
-          previewPath,
-        ]);
-        const previewBuffer = await readFile(previewPath);
-        previewKey = `events/${eventId}/variants/${mediaId}/preview.jpg`;
-        await this.upload(previewKey, previewBuffer, "image/jpeg");
-        previewUrl = this.publicUrl(previewKey);
-      } catch {
-        this.logger.warn("ffmpeg not available, skipping preview generation");
+      const seekPoints = ["0.1", "0", "1"];
+      for (const seek of seekPoints) {
+        try {
+          await rm(previewPath, { force: true });
+          await exec("ffmpeg", [
+            "-ss", seek,
+            "-i", videoPath,
+            "-vframes", "1",
+            "-vf", "scale=480:-1",
+            "-an",
+            "-q:v", "3",
+            previewPath,
+          ]);
+          const previewBuffer = await readFile(previewPath);
+          if (previewBuffer.length === 0) {
+            this.logger.warn(`ffmpeg produced empty preview at ${seek}s for ${storageKey}`);
+            continue;
+          }
+          previewKey = `events/${eventId}/variants/${mediaId}/preview.jpg`;
+          await this.upload(previewKey, previewBuffer, "image/jpeg");
+          previewUrl = this.publicUrl(previewKey);
+          break;
+        } catch (err) {
+          this.logger.warn(
+            `ffmpeg preview failed at ${seek}s for ${storageKey}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      if (!previewUrl) {
+        this.logger.error(`All ffmpeg preview attempts failed for ${storageKey}`);
       }
 
       return {
