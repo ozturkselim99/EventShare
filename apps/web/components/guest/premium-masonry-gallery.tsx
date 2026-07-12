@@ -13,6 +13,36 @@ interface Props {
   initialData: GalleryPage;
 }
 
+function formatPostDate(createdAt: string): string {
+  return new Date(createdAt).toLocaleDateString("tr-TR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function PostHeader({ item }: { item: MediaRecord }) {
+  const displayName = item.uploadedBy || "Misafir";
+  const initial = displayName.charAt(0).toUpperCase();
+
+  return (
+    <div className="px-4 py-3 flex items-center gap-3">
+      <div
+        className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium text-white shrink-0"
+        style={{ backgroundColor: "#C8A96A" }}
+      >
+        {initial}
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-gray-900 truncate">{displayName}</p>
+        <p className="text-xs text-gray-500">{formatPostDate(item.createdAt)}</p>
+      </div>
+    </div>
+  );
+}
+
 export function PremiumMasonryGallery({
   eventToken,
   eventId,
@@ -79,113 +109,65 @@ export function PremiumMasonryGallery({
 
   return (
     <>
-      {/* Gallery Grid */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="masonry-gallery"
+        className="max-w-[480px] mx-auto flex flex-col gap-6"
       >
         {items.map((item, idx) => (
-          <motion.div
+          <motion.article
             key={item.id}
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4, delay: idx * 0.05 }}
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: Math.min(idx * 0.05, 0.3) }}
             viewport={{ once: true, margin: "50px" }}
-            className="masonry-item group cursor-pointer"
+            className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden cursor-pointer group"
             onClick={() => setLightboxIndex(idx)}
           >
-            <div className="relative w-full h-full rounded-2xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 aspect-square">
+            <PostHeader item={item} />
+
+            <div className="relative w-full bg-gray-100">
               {item.type === "IMAGE" ? (
-                <>
-                  {/* Blur-up effect with placeholder */}
-                  <motion.div
-                    initial={{ opacity: 1 }}
-                    animate={{ opacity: 0 }}
-                    transition={{ duration: 0.3, delay: 0.2 }}
-                    className="absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 blur-xl"
-                  />
-
-                  <motion.img
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    transition={{ duration: 0.6 }}
-                    src={item.thumbnailUrl ?? item.originalUrl ?? ""}
-                    alt={
-                      item.uploadedBy ? `Uploaded by ${item.uploadedBy}` : ""
+                <img
+                  src={item.thumbnailUrl ?? item.originalUrl ?? ""}
+                  alt={item.uploadedBy ? `Yükleyen: ${item.uploadedBy}` : ""}
+                  loading="lazy"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (target.src !== item.originalUrl && item.originalUrl) {
+                      target.src = item.originalUrl;
                     }
-                    loading="lazy"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      if (
-                        target.src !== item.originalUrl &&
-                        item.originalUrl
-                      ) {
-                        target.src = item.originalUrl;
-                      }
-                    }}
-                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                </>
+                  }}
+                  className="w-full max-h-[70vh] object-cover"
+                />
               ) : (
-                <>
-                  {/* Video Preview */}
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    transition={{ duration: 0.6 }}
-                    className="relative w-full h-full bg-gray-900"
-                  >
-                    <VideoThumbnail
-                      thumbnailUrl={item.thumbnailUrl}
-                      originalUrl={item.originalUrl}
-                      alt="Video preview"
-                      className="w-full h-full object-cover group-hover:brightness-75 transition-all duration-300"
-                      fallback={
-                        <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-                          <Play className="w-12 h-12 text-white/60" />
-                        </div>
-                      }
-                    />
-                  </motion.div>
-
-                  {/* Play Button Overlay */}
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    whileHover={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.2 }}
-                    className="absolute inset-0 flex items-center justify-center"
-                  >
+                <div className="relative w-full bg-gray-900">
+                  <VideoThumbnail
+                    thumbnailUrl={item.thumbnailUrl}
+                    originalUrl={item.originalUrl}
+                    alt="Video preview"
+                    className="w-full max-h-[70vh] object-cover"
+                    fallback={
+                      <div className="w-full h-48 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                        <Play className="w-12 h-12 text-white/60" />
+                      </div>
+                    }
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center group-hover:bg-white/30 transition-all">
                       <Play className="w-7 h-7 text-white fill-white" />
                     </div>
-                  </motion.div>
-                </>
-              )}
-
-              {/* Hover Overlay with Upload Info */}
-              {item.uploadedBy && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  whileHover={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex flex-col justify-end p-4"
-                >
-                  <p className="text-sm font-medium text-white truncate">
-                    {item.uploadedBy}
-                  </p>
-                </motion.div>
+                  </div>
+                </div>
               )}
             </div>
-          </motion.div>
+          </motion.article>
         ))}
       </motion.div>
 
-      {/* Sentinel for infinite scroll */}
       <div ref={sentinelRef} className="h-4" />
 
-      {/* Loading indicator */}
       {loading && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -200,7 +182,6 @@ export function PremiumMasonryGallery({
         </motion.div>
       )}
 
-      {/* Lightbox */}
       {lightboxIndex !== null && (
         <Lightbox
           items={items}

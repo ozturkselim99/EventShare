@@ -54,7 +54,7 @@ export function EventHero({ event, mediaStats }: EventHeroProps) {
         >
           {/* Event Date - Serif, elegant */}
           <motion.div variants={itemVariants} className="mb-6 sm:mb-8">
-            <p className="font-['Cormorant_Garamond'] text-xs sm:text-sm font-light tracking-widest uppercase" style={{ color: '#5C5C5C' }}>
+            <p className="font-['Cormorant_Garamond'] text-lg sm:text-xl lg:text-2xl font-medium tracking-wide" style={{ color: '#3D3D3D' }}>
               {event.eventDate
                 ? new Date(event.eventDate).toLocaleDateString("tr-TR", {
                     day: "numeric",
@@ -64,7 +64,7 @@ export function EventHero({ event, mediaStats }: EventHeroProps) {
                 : "Özel Etkinlik"}
             </p>
             {event.eventDate && (
-              <p className="font-['Cormorant_Garamond'] text-xs sm:text-sm font-light tracking-widest uppercase mt-1" style={{ color: '#5C5C5C' }}>
+              <p className="font-['Cormorant_Garamond'] text-lg sm:text-xl lg:text-2xl font-medium tracking-wide mt-1" style={{ color: '#3D3D3D' }}>
                 {new Date(event.eventDate).toLocaleTimeString("tr-TR", {
                   hour: "2-digit",
                   minute: "2-digit",
