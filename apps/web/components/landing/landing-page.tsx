@@ -13,6 +13,8 @@ import {
   Sparkles,
   ImageIcon,
   Shield,
+  Mail,
+  Instagram,
 } from "lucide-react";
 
 const fadeUp = {
@@ -287,6 +289,36 @@ export function LandingPage() {
             Etkinliğiniz için galeri oluşturun, QR kodunuzu paylaşın ve misafirlerinizden
             gelen her kareyi tek yerde toplayın.
           </p>
+        </div>
+      </section>
+
+      {/* Contact */}
+      <section className="bg-white px-6 py-16 sm:py-20">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="mb-3 font-['Cormorant_Garamond'] text-xs uppercase tracking-[0.25em] text-[#C8A96A]">
+            İletişim
+          </p>
+          <h2 className="mb-8 font-['Cormorant_Garamond'] text-3xl font-light tracking-wide sm:text-4xl">
+            Bize ulaşın
+          </h2>
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+            <a
+              href="mailto:rivaeventdesign@gmail.com"
+              className="inline-flex items-center gap-2 rounded-full border border-[#EEE8E1] bg-[#FDFCFA] px-6 py-3 text-sm text-[#5C5C5C] transition hover:border-[#C8A96A] hover:text-[#C8A96A]"
+            >
+              <Mail className="h-4 w-4" />
+              rivaeventdesign@gmail.com
+            </a>
+            <a
+              href="https://instagram.com/rivaeventdesign"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-[#EEE8E1] bg-[#FDFCFA] px-6 py-3 text-sm text-[#5C5C5C] transition hover:border-[#C8A96A] hover:text-[#C8A96A]"
+            >
+              <Instagram className="h-4 w-4" />
+              @rivaeventdesign
+            </a>
+          </div>
         </div>
       </section>
 
