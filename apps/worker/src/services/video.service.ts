@@ -4,11 +4,13 @@ import { ConfigService } from "@nestjs/config";
 import { resolveR2Endpoint } from "@eventshare/shared";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { writeFile, readFile, rm, mkdir } from "fs/promises";
+import { readFile, rm, mkdir } from "fs/promises";
+import { createWriteStream } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomBytes } from "crypto";
 import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 
 const exec = promisify(execFile);
 
@@ -46,8 +48,10 @@ export class VideoService {
     const previewPath = join(tmpDir, "preview.jpg");
 
     try {
-      const videoBytes = await this.download(storageKey);
-      await writeFile(videoPath, videoBytes);
+      // Stream straight to disk instead of buffering the whole file (up to
+      // 500MB) in memory — ffmpeg/ffprobe need a file on disk anyway (seek
+      // support), so there's no reason to hold the bytes in the process too.
+      await this.downloadToFile(storageKey, videoPath);
 
       let durationSeconds: number | null = null;
       let width: number | null = null;
@@ -125,16 +129,12 @@ export class VideoService {
     }
   }
 
-  private async download(key: string): Promise<Buffer> {
+  private async downloadToFile(key: string, destPath: string): Promise<void> {
     const { Body } = await this.s3.send(
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
     );
     if (!Body) throw new Error(`Empty body for key: ${key}`);
-    const chunks: Uint8Array[] = [];
-    for await (const chunk of Body as Readable) {
-      chunks.push(chunk as Uint8Array);
-    }
-    return Buffer.concat(chunks);
+    await pipeline(Body as Readable, createWriteStream(destPath));
   }
 
   private async upload(key: string, data: Buffer, contentType: string) {

@@ -1,8 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma.service";
 import { ImageService } from "./image.service";
 import { VideoService } from "./video.service";
 import {
+  ConcurrencyLimiter,
   JobName,
   MediaStatus,
   type ProcessMediaJobData,
@@ -11,12 +13,27 @@ import {
 @Injectable()
 export class MediaProcessingService {
   private readonly logger = new Logger(MediaProcessingService.name);
+  // Video is by far the heaviest (ffmpeg + up to 500MB files), so it gets a
+  // tighter cap than images. Excess jobs queue in-process rather than all
+  // running at once and competing for CPU/memory. Safe to queue: the atomic
+  // claim above already happened, and QStash redeliveries on timeout are
+  // idempotent no-ops against an already-claimed/READY media row.
+  private readonly imageLimiter: ConcurrencyLimiter;
+  private readonly videoLimiter: ConcurrencyLimiter;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly imageService: ImageService,
     private readonly videoService: VideoService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.imageLimiter = new ConcurrencyLimiter(
+      Number(config.get("WORKER_MAX_CONCURRENT_IMAGE_JOBS") ?? 4),
+    );
+    this.videoLimiter = new ConcurrencyLimiter(
+      Number(config.get("WORKER_MAX_CONCURRENT_VIDEO_JOBS") ?? 2),
+    );
+  }
 
   async process(jobName: JobName, data: ProcessMediaJobData) {
     const { mediaId, eventId, storageKey } = data;
@@ -27,16 +44,20 @@ export class MediaProcessingService {
       this.logger.warn(`Media ${mediaId} not found, skipping`);
       return;
     }
-    // Idempotency: skip if already processed (QStash may retry/redeliver)
-    if (media.status === MediaStatus.READY) {
-      this.logger.log(`Media ${mediaId} already READY, skipping`);
-      return;
-    }
 
-    await this.prisma.media.update({
-      where: { id: mediaId },
+    // Atomic claim: only one concurrent QStash delivery can win this update.
+    // Losers (count === 0) mean another delivery already claimed/finished the job.
+    const claim = await this.prisma.media.updateMany({
+      where: {
+        id: mediaId,
+        status: { in: [MediaStatus.UPLOADED, MediaStatus.FAILED] },
+      },
       data: { status: MediaStatus.PROCESSING },
     });
+    if (claim.count === 0) {
+      this.logger.log(`Media ${mediaId} already claimed/processed (status=${media.status}), skipping`);
+      return;
+    }
 
     // ── Local dev fast-path ──────────────────────────────────────────────────
     if (process.env.STORAGE_PROVIDER === "local") {
@@ -72,9 +93,13 @@ export class MediaProcessingService {
       };
 
       if (jobName === JobName.PROCESS_IMAGE) {
-        result = await this.imageService.process(storageKey, eventId, mediaId);
+        result = await this.imageLimiter.run(() =>
+          this.imageService.process(storageKey, eventId, mediaId),
+        );
       } else if (jobName === JobName.PROCESS_VIDEO) {
-        result = await this.videoService.process(storageKey, eventId, mediaId);
+        result = await this.videoLimiter.run(() =>
+          this.videoService.process(storageKey, eventId, mediaId),
+        );
       } else {
         throw new Error(`Unknown job name: ${jobName}`);
       }

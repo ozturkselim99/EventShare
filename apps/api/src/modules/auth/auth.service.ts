@@ -30,18 +30,35 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
-    const session = await this.prisma.adminSession.findFirst({
+    let payload: { sub: string };
+    try {
+      payload = this.jwtService.verify(refreshToken, {
+        secret: this.config.get<string>("app.jwtRefreshSecret"),
+      });
+    } catch {
+      throw new ForbiddenException("Invalid refresh token");
+    }
+
+    // Scope the session search to the presented token's own admin — a
+    // global findFirst() here would pick an arbitrary active session and
+    // fail nondeterministically whenever more than one admin/session is live.
+    const sessions = await this.prisma.adminSession.findMany({
       where: {
+        adminId: payload.sub,
         revokedAt: null,
         expiresAt: { gt: new Date() },
       },
       include: { admin: true },
     });
 
+    let session: (typeof sessions)[number] | undefined;
+    for (const candidate of sessions) {
+      if (await argon2.verify(candidate.refreshTokenHash, refreshToken)) {
+        session = candidate;
+        break;
+      }
+    }
     if (!session) throw new ForbiddenException("Invalid refresh token");
-
-    const valid = await argon2.verify(session.refreshTokenHash, refreshToken);
-    if (!valid) throw new ForbiddenException("Invalid refresh token");
 
     await this.prisma.adminSession.update({
       where: { id: session.id },

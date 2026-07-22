@@ -15,15 +15,54 @@ export class MediaService {
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
   ) {}
 
+  private encodeCursor(createdAt: Date, id: string): string {
+    return Buffer.from(`${createdAt.toISOString()}_${id}`, "utf8").toString(
+      "base64url",
+    );
+  }
+
+  private decodeCursor(cursor: string): { createdAt: Date; id: string } {
+    const [iso, id] = Buffer.from(cursor, "base64url")
+      .toString("utf8")
+      .split("_");
+    const createdAt = new Date(iso);
+    if (!id || Number.isNaN(createdAt.getTime())) {
+      throw new NotFoundException("Invalid cursor");
+    }
+    return { createdAt, id };
+  }
+
   async findByEvent(
     eventId: string,
     query: { cursor?: string; limit?: number; type?: string; sort?: string },
   ) {
     const limit = query.limit ?? 40;
-    const orderBy =
-      query.sort === "oldest"
-        ? [{ createdAt: "asc" as const }, { id: "asc" as const }]
-        : [{ createdAt: "desc" as const }, { id: "desc" as const }];
+    const oldest = query.sort === "oldest";
+    const orderBy = oldest
+      ? [{ createdAt: "asc" as const }, { id: "asc" as const }]
+      : [{ createdAt: "desc" as const }, { id: "desc" as const }];
+
+    // Compound keyset cursor (createdAt, id) — required because createdAt
+    // alone isn't unique (bursts of concurrent uploads share a timestamp),
+    // and id alone isn't sort-ordered (UUIDs aren't monotonic).
+    const cursorFilter = query.cursor
+      ? (() => {
+          const c = this.decodeCursor(query.cursor as string);
+          return oldest
+            ? {
+                OR: [
+                  { createdAt: { gt: c.createdAt } },
+                  { createdAt: c.createdAt, id: { gt: c.id } },
+                ],
+              }
+            : {
+                OR: [
+                  { createdAt: { lt: c.createdAt } },
+                  { createdAt: c.createdAt, id: { lt: c.id } },
+                ],
+              };
+        })()
+      : {};
 
     const items = await this.prisma.media.findMany({
       where: {
@@ -31,7 +70,7 @@ export class MediaService {
         status: MediaStatus.READY,
         deletedAt: null,
         ...(query.type && { type: query.type as "IMAGE" | "VIDEO" }),
-        ...(query.cursor && { id: { lt: query.cursor } }),
+        ...cursorFilter,
       },
       orderBy,
       take: limit + 1,
@@ -39,6 +78,7 @@ export class MediaService {
 
     const hasMore = items.length > limit;
     const data = hasMore ? items.slice(0, limit) : items;
+    const last = data[data.length - 1];
 
     return {
       data: data.map((m: (typeof data)[number]) => ({
@@ -52,7 +92,7 @@ export class MediaService {
         height: m.height,
         durationSeconds: m.durationSeconds,
       })),
-      nextCursor: hasMore ? data[data.length - 1]?.id ?? null : null,
+      nextCursor: hasMore && last ? this.encodeCursor(last.createdAt, last.id) : null,
       hasMore,
     };
   }

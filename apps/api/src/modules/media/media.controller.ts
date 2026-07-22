@@ -15,8 +15,9 @@ import { ConfigService } from "@nestjs/config";
 import { ApiTags, ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import type { Response } from "express";
 import { MediaService } from "./media.service";
+import { EventsService } from "../events/events.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
-import { QueryAdminMediaDto } from "./dto/query-media.dto";
+import { QueryAdminMediaDto, QueryMediaDto } from "./dto/query-media.dto";
 import { ZipArchive } from "archiver";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -134,19 +135,18 @@ export class AdminMediaController {
 @ApiTags("media")
 @Controller("events/by-token/:token/media")
 export class PublicMediaController {
-  constructor(private readonly media: MediaService) {}
+  constructor(
+    private readonly media: MediaService,
+    private readonly events: EventsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "Gallery cursor pagination (public)" })
-  findByEvent(
-    @Param("token") _token: string,
-    @Query("eventId") eventId: string,
-    @Query("cursor") cursor?: string,
-    @Query("limit") limit?: number,
-    @Query("type") type?: string,
-    @Query("sort") sort?: string,
-  ) {
-    return this.media.findByEvent(eventId, { cursor, limit, type, sort });
+  async findByEvent(@Param("token") token: string, @Query() query: QueryMediaDto) {
+    // Resolve eventId from the QR token server-side — never trust a
+    // client-supplied eventId, or any token holder could read any event's gallery.
+    const event = await this.events.findByToken(token);
+    return this.media.findByEvent(event.id, query);
   }
 }
 

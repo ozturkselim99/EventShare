@@ -4,17 +4,27 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { CacheService } from "../cache/cache.service";
 import { ConfigService } from "@nestjs/config";
 import type { CreateEventDto } from "./dto/create-event.dto";
 import type { UpdateEventDto } from "./dto/update-event.dto";
 import { EventStatus, ExpirationMode } from "@eventshare/shared";
 import { randomBytes } from "crypto";
 
+const EVENT_TOKEN_CACHE_TTL_SECONDS = 60;
+const STATS_CACHE_TTL_SECONDS = 30;
+const STATS_CACHE_KEY = "admin:stats";
+
+function eventTokenCacheKey(token: string) {
+  return `event:token:${token}`;
+}
+
 @Injectable()
 export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly cache: CacheService,
   ) {}
 
   private generateToken(): string {
@@ -93,21 +103,29 @@ export class EventsService {
   }
 
   async findByToken(token: string) {
+    const cacheKey = eventTokenCacheKey(token);
+    const cached = await this.cache.get<Awaited<ReturnType<typeof this.prisma.event.findFirst>>>(
+      cacheKey,
+    );
+    if (cached) return cached;
+
     const event = await this.prisma.event.findFirst({
       where: { token, deletedAt: null },
     });
     if (!event) throw new NotFoundException("Event not found");
+
+    await this.cache.set(cacheKey, event, EVENT_TOKEN_CACHE_TTL_SECONDS);
     return event;
   }
 
   async update(id: string, dto: UpdateEventDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
 
     const maxStorageBytes = dto.maxStorageGb
       ? BigInt(dto.maxStorageGb) * BigInt(1024 * 1024 * 1024)
       : undefined;
 
-    return this.prisma.event.update({
+    const updated = await this.prisma.event.update({
       where: { id },
       data: {
         ...(dto.name && { name: dto.name }),
@@ -122,17 +140,29 @@ export class EventsService {
         ...(maxStorageBytes !== undefined && { maxStorageBytes }),
       },
     });
+    await this.cache.del(eventTokenCacheKey(existing.token));
+    return updated;
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-    return this.prisma.event.update({
+    const existing = await this.findOne(id);
+    const removed = await this.prisma.event.update({
       where: { id },
       data: { deletedAt: new Date(), status: EventStatus.DELETED },
     });
+    await this.cache.del(eventTokenCacheKey(existing.token));
+    return removed;
   }
 
   async getStats() {
+    const cached = await this.cache.get<{
+      eventsCount: number;
+      imagesCount: number;
+      videosCount: number;
+      storageBytes: string | bigint;
+    }>(STATS_CACHE_KEY);
+    if (cached) return cached;
+
     const [eventsCount, imagesCount, videosCount, storageResult] =
       await Promise.all([
         this.prisma.event.count({ where: { deletedAt: null } }),
@@ -148,12 +178,14 @@ export class EventsService {
         }),
       ]);
 
-    return {
+    const stats = {
       eventsCount,
       imagesCount,
       videosCount,
       storageBytes: storageResult._sum.size ?? BigInt(0),
     };
+    await this.cache.set(STATS_CACHE_KEY, stats, STATS_CACHE_TTL_SECONDS);
+    return stats;
   }
 
   isExpired(event: { expiresAt: Date }) {

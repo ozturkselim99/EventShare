@@ -18,4 +18,8 @@ export default registerAs("app", () => ({
     url: process.env.QSTASH_URL ?? "",
     workerUrl: process.env.WORKER_PUBLIC_URL ?? "http://localhost:3002",
   },
+  redis: {
+    url: process.env.UPSTASH_REDIS_REST_URL ?? "",
+    token: process.env.UPSTASH_REDIS_REST_TOKEN ?? "",
+  },
 }));

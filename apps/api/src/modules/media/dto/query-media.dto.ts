@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, Min, IsIn } from "class-validator";
+import { IsInt, IsOptional, IsString, Min, Max, IsIn } from "class-validator";
 
 export class QueryMediaDto {
   @ApiPropertyOptional()
@@ -13,6 +13,7 @@ export class QueryMediaDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 40;
 
   @ApiPropertyOptional({ enum: ["IMAGE", "VIDEO"] })
@@ -39,5 +40,6 @@ export class QueryAdminMediaDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 40;
 }
