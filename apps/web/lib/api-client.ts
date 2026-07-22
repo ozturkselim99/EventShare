@@ -108,11 +108,16 @@ export const publicApi = {
   getEvent: (token: string) =>
     apiFetch<EventRecord>(`/events/by-token/${token}`),
 
-  getMedia: (eventToken: string, eventId: string, params?: { cursor?: string; limit?: number }) => {
-    const qs = new URLSearchParams({ eventId });
+  // `eventId` param kept for call-site backward compat but intentionally
+  // unused here: the API now derives the event from the QR token itself
+  // (server-side), so a client-supplied eventId can no longer be trusted
+  // or accepted (ValidationPipe's forbidNonWhitelisted would reject it anyway).
+  getMedia: (eventToken: string, _eventId: string, params?: { cursor?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
     if (params?.cursor) qs.set("cursor", params.cursor);
     if (params?.limit) qs.set("limit", String(params.limit));
-    return apiFetch<GalleryPage>(`/events/by-token/${eventToken}/media?${qs}`);
+    const query = qs.toString();
+    return apiFetch<GalleryPage>(`/events/by-token/${eventToken}/media${query ? `?${query}` : ""}`);
   },
 
   presign: (eventToken: string, body: PresignBody) =>

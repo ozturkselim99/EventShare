@@ -2,12 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { publicApi, ApiError } from "@/lib/api-client";
+import { publicApi, ApiError, type PresignResponse } from "@/lib/api-client";
+import { ConcurrencyLimiter } from "@eventshare/shared";
 import {
   Upload,
   Camera,
   Image as ImageIcon,
   Trash2,
+  RotateCcw,
   CheckCircle,
 } from "lucide-react";
 
@@ -32,16 +34,45 @@ const ALLOWED_TYPES = [
   "video/quicktime",
 ];
 
+const MAX_PARALLEL_UPLOADS = 3;
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 1000;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Distinguishes the direct-to-storage PUT step's failures from API failures
+// so retry policy can tell "worth retrying" (network drop, 5xx) apart from
+// "retrying won't help" (e.g. storage rejected content-type/size mismatch).
+class UploadHttpError extends Error {
+  constructor(public readonly status: number) {
+    super(`Upload PUT failed with status ${status}`);
+  }
+}
+
+function isRetryableError(err: unknown): boolean {
+  if (err instanceof ApiError) return err.status >= 500;
+  if (err instanceof UploadHttpError) return err.status === 0 || err.status >= 500;
+  return true;
+}
+
 export function PremiumUploadZone({ eventToken, onUploaded }: Props) {
   const [displayName, setDisplayName] = useState("");
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
+  const [statusText, setStatusText] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  // Caches the presign per file across retry attempts — reusing the same
+  // mediaId/uploadToken means a network-blip retry re-PUTs the same storage
+  // key instead of minting a brand new Media row (which would otherwise show
+  // up as a duplicate photo once processed).
+  const presignCache = useRef<Map<string, PresignResponse>>(new Map());
 
   useEffect(() => {
     return () => {
@@ -87,18 +118,29 @@ export function PremiumUploadZone({ eventToken, onUploaded }: Props) {
       delete n[key];
       return n;
     });
+    setStatusText((s) => {
+      const n = { ...s };
+      delete n[key];
+      return n;
+    });
+    presignCache.current.delete(key);
   }
 
   async function uploadEntry(entry: FileEntry): Promise<void> {
     const { file, key } = entry;
     setProgress((p) => ({ ...p, [key]: 0 }));
 
-    const presign = await publicApi.presign(eventToken, {
-      filename: file.name,
-      mimeType: file.type,
-      size: file.size,
-      uploadedBy: displayName || undefined,
-    });
+    let presign = presignCache.current.get(key);
+    if (!presign) {
+      presign = await publicApi.presign(eventToken, {
+        filename: file.name,
+        mimeType: file.type,
+        size: file.size,
+        uploadedBy: displayName || undefined,
+      });
+      presignCache.current.set(key, presign);
+    }
+    const active = presign;
 
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -113,21 +155,61 @@ export function PremiumUploadZone({ eventToken, onUploaded }: Props) {
       xhr.onload = () =>
         xhr.status >= 200 && xhr.status < 300
           ? resolve()
-          : reject(new Error(`${xhr.status}`));
-      xhr.onerror = () => reject(new Error("Network error"));
-      xhr.open(presign.method, presign.uploadUrl);
-      Object.entries(presign.headers).forEach(([k, v]) =>
+          : reject(new UploadHttpError(xhr.status));
+      xhr.onerror = () => reject(new UploadHttpError(0));
+      xhr.open(active.method, active.uploadUrl);
+      Object.entries(active.headers).forEach(([k, v]) =>
         xhr.setRequestHeader(k, v)
       );
       xhr.send(file);
     });
 
     await publicApi.completeUpload(eventToken, {
-      mediaId: presign.mediaId,
-      uploadToken: presign.uploadToken,
+      mediaId: active.mediaId,
+      uploadToken: active.uploadToken,
     });
 
+    presignCache.current.delete(key);
     setProgress((p) => ({ ...p, [key]: 100 }));
+  }
+
+  async function uploadWithRetry(entry: FileEntry): Promise<void> {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        setStatusText((s) => {
+          const n = { ...s };
+          delete n[entry.key];
+          return n;
+        });
+        await uploadEntry(entry);
+        return;
+      } catch (err) {
+        const isLastAttempt = attempt === MAX_ATTEMPTS;
+        if (!isLastAttempt && isRetryableError(err)) {
+          setStatusText((s) => ({
+            ...s,
+            [entry.key]: `Bağlantı sorunu, yeniden deneniyor (${attempt}/${MAX_ATTEMPTS})...`,
+          }));
+          await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+          continue;
+        }
+        // Auto-retries exhausted (or the error isn't retryable) — drop the
+        // cached presign so a manual retry starts clean instead of reusing
+        // whatever made every attempt fail.
+        presignCache.current.delete(entry.key);
+        throw err;
+      }
+    }
+  }
+
+  function errorMessage(err: unknown): string {
+    if (err instanceof ApiError) return err.message;
+    if (err instanceof UploadHttpError) {
+      return err.status === 0
+        ? "Ağ bağlantısı kesildi"
+        : `Yükleme başarısız oldu (${err.status})`;
+    }
+    return "Yükleme başarısız oldu";
   }
 
   async function handleUpload() {
@@ -135,16 +217,16 @@ export function PremiumUploadZone({ eventToken, onUploaded }: Props) {
     setUploading(true);
     setErrors({});
 
-    const results = await Promise.allSettled(entries.map((e) => uploadEntry(e)));
+    const limiter = new ConcurrencyLimiter(MAX_PARALLEL_UPLOADS);
+    const results = await Promise.allSettled(
+      entries.map((e) => limiter.run(() => uploadWithRetry(e))),
+    );
 
     const errs: Record<string, string> = {};
     results.forEach((r, i) => {
       if (r.status === "rejected") {
         const key = entries[i]!.key;
-        errs[key] =
-          r.reason instanceof ApiError
-            ? r.reason.message
-            : "Upload failed";
+        errs[key] = errorMessage(r.reason);
       }
     });
 
@@ -160,6 +242,26 @@ export function PremiumUploadZone({ eventToken, onUploaded }: Props) {
         setUploadComplete(false);
         onUploaded?.();
       }, 2000);
+    }
+  }
+
+  async function retrySingleEntry(entry: FileEntry) {
+    setUploading(true);
+    setErrors((e) => {
+      const n = { ...e };
+      delete n[entry.key];
+      return n;
+    });
+
+    try {
+      await uploadWithRetry(entry);
+      setEntries((prev) => prev.filter((e) => e.key !== entry.key));
+      if (entry.preview) URL.revokeObjectURL(entry.preview);
+      onUploaded?.();
+    } catch (err) {
+      setErrors((e) => ({ ...e, [entry.key]: errorMessage(err) }));
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -353,8 +455,9 @@ export function PremiumUploadZone({ eventToken, onUploaded }: Props) {
               {entries.map((entry) => {
                 const pct = progress[entry.key] ?? -1;
                 const err = errors[entry.key];
+                const retryStatus = statusText[entry.key];
                 const done = pct === 100;
-                const inProgress = pct >= 0 && pct < 100 && uploading;
+                const inProgress = pct >= 0 && pct < 100 && uploading && !err;
 
                 return (
                   <motion.div
@@ -401,8 +504,8 @@ export function PremiumUploadZone({ eventToken, onUploaded }: Props) {
                             }}
                             className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full mb-2"
                           />
-                          <span className="text-white text-xs font-semibold">
-                            {pct}%
+                          <span className="text-white text-xs font-semibold text-center px-1">
+                            {retryStatus ?? `${pct}%`}
                           </span>
                         </motion.div>
                       )}
@@ -434,11 +537,37 @@ export function PremiumUploadZone({ eventToken, onUploaded }: Props) {
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
-                          className="absolute inset-0 bg-red-600/80 flex items-center justify-center p-2"
+                          className="absolute inset-0 bg-red-600/80 flex flex-col items-center justify-center gap-2 p-2"
                         >
                           <span className="text-white text-xs text-center leading-tight font-medium">
                             {err}
                           </span>
+                          {!uploading && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  retrySingleEntry(entry);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white text-red-700 text-xs font-semibold hover:bg-red-50 transition"
+                                type="button"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Tekrar Dene
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeEntry(entry.key);
+                                }}
+                                className="w-6 h-6 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 transition"
+                                type="button"
+                                aria-label="Kaldır"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>
