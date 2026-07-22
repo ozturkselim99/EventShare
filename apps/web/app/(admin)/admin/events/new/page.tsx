@@ -68,7 +68,7 @@ export default function NewEventPage() {
       const event = await createEventAction({
         name: form.name,
         description: form.description || undefined,
-        eventDate: form.eventDate || undefined,
+        eventDate: form.eventDate ? new Date(form.eventDate).toISOString() : undefined,
         expiresAt: new Date(form.expiresAt).toISOString(),
         expirationMode: form.expirationMode,
         maxUploads: form.maxUploads ? parseInt(form.maxUploads, 10) : undefined,
