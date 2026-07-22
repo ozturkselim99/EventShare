@@ -140,10 +140,28 @@ export function EventPageClientPremium({
               <p className="text-base text-gray-700 font-medium">
                 Bu etkinlik{" "}
                 {new Date(event.expiresAt).toLocaleDateString("tr-TR", {
-                  month: "short",
+                  month: "long",
                   day: "numeric",
-                })}
-                 tarihinde sona erdi. Galeriye bakabilirsin ama yeni yükleme yapılamaz.
+                  year: "numeric",
+                })}{" "}
+                tarihinde sona erdi. Yeni fotoğraf yüklenemiyor, ancak
+                etkinlik boyunca paylaşılan tüm anıları galeriden
+                keşfedebilirsin.
+              </p>
+            </motion.div>
+          )}
+
+          {/* Uploads Disabled State */}
+          {!event.allowUploads && !isExpired && !isNotStarted && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mb-12 rounded-3xl border border-yellow-200 bg-gradient-to-br from-yellow-50 to-yellow-100/50 px-6 py-8 sm:px-8 sm:py-10 text-center"
+            >
+              <p className="text-base text-yellow-800 font-medium">
+                Bu etkinlikte fotoğraf yükleme özelliği geçici olarak
+                kullanılamıyor. Paylaşılan anılara galeriden göz atabilirsin.
               </p>
             </motion.div>
           )}

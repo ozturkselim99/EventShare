@@ -2,16 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { adminEventsApi, ApiError, type EventRecord } from "@/lib/api-client";
-
-function getToken() {
-  return (
-    document.cookie
-      .split("; ")
-      .find((c) => c.startsWith("es_access_token="))
-      ?.split("=")[1] ?? ""
-  );
-}
+import { ApiError, type EventRecord } from "@/lib/api-client";
+import {
+  disableUploadsAction,
+  enableUploadsAction,
+  deleteEventAction,
+} from "@/lib/auth";
 
 interface Props {
   event: EventRecord;
@@ -35,16 +31,12 @@ export function EventActions({ event }: Props) {
     }
   }
 
-  const token = getToken;
-
   return (
     <div className="flex flex-wrap gap-3">
       {event.allowUploads ? (
         <button
           disabled={!!loading}
-          onClick={() =>
-            run(() => adminEventsApi.disableUploads(token(), event.id), "disable")
-          }
+          onClick={() => run(() => disableUploadsAction(event.id), "disable")}
           className="px-4 py-2 text-sm border border-yellow-300 text-yellow-800 rounded-xl hover:bg-yellow-50 transition disabled:opacity-50"
         >
           {loading === "disable" ? "..." : "Yüklemeleri Kapat"}
@@ -52,9 +44,7 @@ export function EventActions({ event }: Props) {
       ) : (
         <button
           disabled={!!loading}
-          onClick={() =>
-            run(() => adminEventsApi.enableUploads(token(), event.id), "enable")
-          }
+          onClick={() => run(() => enableUploadsAction(event.id), "enable")}
           className="px-4 py-2 text-sm border border-green-300 text-green-800 rounded-xl hover:bg-green-50 transition disabled:opacity-50"
         >
           {loading === "enable" ? "..." : "Yüklemeleri Aç"}
@@ -147,10 +137,7 @@ export function EventActions({ event }: Props) {
         disabled={!!loading}
         onClick={() => {
           if (!confirm("Etkinliği silmek istediğinizden emin misiniz?")) return;
-          run(
-            () => adminEventsApi.remove(token(), event.id),
-            "delete",
-          ).then(() => {
+          run(() => deleteEventAction(event.id), "delete").then(() => {
             window.location.href = "/admin/events";
           });
         }}
